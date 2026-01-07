@@ -628,7 +628,7 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         return sprintf(
             'notification_prefs.%s.%s',
             $userId,
-            hash('xxh3', "{$notificationType}:{$channel}")
+            hash('sha256', "{$notificationType}:{$channel}")
         );
     }
 
@@ -642,7 +642,7 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         return sprintf(
             'notification_prefs.%s.batch.%s',
             $userId,
-            hash('xxh3', $notificationType)
+            hash('sha256', $notificationType)
         );
     }
 
