@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OffloadProject\NotificationPreferences\Concerns;
 
-use OffloadProject\NotificationPreferences\NotificationPreferenceManager;
+use OffloadProject\NotificationPreferences\Contracts\NotificationPreferenceManagerInterface;
 
 trait ChecksNotificationPreferences
 {
@@ -12,10 +12,12 @@ trait ChecksNotificationPreferences
      * Filter channels based on user preferences.
      *
      * @param  mixed  $notifiable
+     * @param  array<int, string>  $channels
+     * @return array<int, string>
      */
     protected function allowedChannels($notifiable, array $channels): array
     {
-        return app(NotificationPreferenceManager::class)
+        return app(NotificationPreferenceManagerInterface::class)
             ->filterChannels($notifiable, static::class, $channels);
     }
 
@@ -24,7 +26,7 @@ trait ChecksNotificationPreferences
      * Override this in your notification to use preference filtering.
      *
      * @param  mixed  $notifiable
-     * @return array
+     * @return array<int, string>
      */
     // public function via($notifiable)
     // {

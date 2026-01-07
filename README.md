@@ -110,13 +110,16 @@ Convenient methods for "disable all emails" or "mute marketing" features:
 
 ```php
 // Disable all emails
-$user->setChannelPreferenceForAll('mail', false);
+$user->setChannelPreferences('mail', false);
 
 // Mute all marketing notifications for email
-$user->setGroupChannelPreference('marketing', 'mail', false);
+$user->setGroupPreferences('marketing', 'mail', false);
 
 // Disable all channels for a notification type
-$user->setAllChannelsForNotification(OrderShipped::class, false);
+$user->setNotificationChannelPreferences(OrderShipped::class, false);
+
+// Reset all preferences to defaults
+$user->resetNotificationPreferences();
 ```
 
 All bulk methods return the count of updated preferences and automatically skip forced channels.
@@ -179,6 +182,28 @@ Event::listen(NotificationPreferenceChanged::class, function ($event) {
     // $event->user - The user who changed the preference
     // $event->wasCreated - Whether this was a new preference or update
 });
+```
+
+## Using the Facade
+
+For quick access without dependency injection:
+
+```php
+use OffloadProject\NotificationPreferences\Facades\NotificationPreferences;
+
+// Check if a channel is enabled
+NotificationPreferences::isChannelEnabled($user, OrderShipped::class, 'mail');
+
+// Set a preference
+NotificationPreferences::setPreference($user, OrderShipped::class, 'mail', false);
+
+// Get structured table for UI
+NotificationPreferences::getPreferencesTable($user);
+
+// Discover registered configuration
+NotificationPreferences::getRegisteredChannels();    // ['mail', 'database']
+NotificationPreferences::getRegisteredGroups();      // ['system', 'marketing']
+NotificationPreferences::getRegisteredNotifications(); // [OrderShipped::class, ...]
 ```
 
 ## Using the Interface
@@ -248,12 +273,54 @@ public function share(Request $request): array
 
 ## Cache Management
 
-Preferences are cached for 24 hours. Clear when needed:
+Preferences are cached for performance (default: 24 hours). Configure the TTL in your config:
 
 ```php
-use OffloadProject\NotificationPreferences\NotificationPreferenceManager;
+// config/notification-preferences.php
+'cache_ttl' => 1440, // minutes (default: 24 hours)
+```
 
-app(NotificationPreferenceManager::class)->clearUserCache($userId);
+Clear caches when needed:
+
+```php
+use OffloadProject\NotificationPreferences\Contracts\NotificationPreferenceManagerInterface;
+
+$manager = app(NotificationPreferenceManagerInterface::class);
+
+// Clear all cached preferences for a user
+$manager->clearUserCache($userId);
+
+// Clear the memoized config cache (useful after runtime config changes)
+$manager->clearConfigCache();
+```
+
+## Exception Handling
+
+The package validates all inputs and throws specific exceptions with helpful messages:
+
+```php
+use OffloadProject\NotificationPreferences\Exceptions\InvalidNotificationTypeException;
+use OffloadProject\NotificationPreferences\Exceptions\InvalidChannelException;
+use OffloadProject\NotificationPreferences\Exceptions\InvalidGroupException;
+
+try {
+    $user->setNotificationPreference('UnregisteredNotification', 'mail', false);
+} catch (InvalidNotificationTypeException $e) {
+    // "Notification type 'UnregisteredNotification' is not registered...
+    //  Add it to the 'notifications' array in 'config/notification-preferences.php'."
+}
+
+try {
+    $user->setNotificationPreference(OrderShipped::class, 'sms', false);
+} catch (InvalidChannelException $e) {
+    // "Channel 'sms' is not registered... Available channels: mail, database."
+}
+
+try {
+    $user->setGroupPreferences('nonexistent', 'mail', false);
+} catch (InvalidGroupException $e) {
+    // "Group 'nonexistent' is not registered... Available groups: system, marketing."
+}
 ```
 
 ## Uninstalling
@@ -265,6 +332,15 @@ rm config/notification-preferences.php
 ```
 
 ## Configuration Reference
+
+### Global Options
+
+| Option               | Type   | Description                                             |
+|----------------------|--------|---------------------------------------------------------|
+| `default_preference` | string | `opt_in` or `opt_out` for all notifications             |
+| `cache_ttl`          | int    | Cache duration in minutes (default: 1440 = 24h)         |
+| `table_name`         | string | Database table name (default: notification_preferences) |
+| `user_model`         | string | User model class (default: App\Models\User)             |
 
 ### Channels
 

@@ -8,13 +8,27 @@ use InvalidArgumentException;
 
 final class InvalidChannelException extends InvalidArgumentException
 {
-    public static function notRegistered(string $channel): self
+    /**
+     * @param  array<int, string>  $availableChannels
+     */
+    public static function notRegistered(string $channel, array $availableChannels = []): self
     {
-        return new self("Channel '{$channel}' is not registered in the configuration.");
+        $message = "Channel '{$channel}' is not registered in the notification-preferences config.";
+
+        if ($availableChannels !== []) {
+            $message .= ' Available channels: '.implode(', ', $availableChannels).'.';
+        } else {
+            $message .= " Register it in 'config/notification-preferences.php' under the 'channels' key.";
+        }
+
+        return new self($message);
     }
 
     public static function disabled(string $channel): self
     {
-        return new self("Channel '{$channel}' is disabled in the configuration.");
+        return new self(
+            "Channel '{$channel}' is disabled in the configuration. "
+            ."Set 'enabled' => true in 'config/notification-preferences.php' to enable it."
+        );
     }
 }
