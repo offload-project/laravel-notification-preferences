@@ -14,7 +14,7 @@ return new class() extends Migration
 
         /** @var class-string<Illuminate\Database\Eloquent\Model> $userModel */
         $userModel = config('notification-preferences.user_model', 'App\\Models\\User');
-        $userTable = (new $userModel())->getTable();
+        $userTable = $userModel::make()->getTable();
 
         Schema::create($tableName, function (Blueprint $table) use ($userTable) {
             $table->id();
