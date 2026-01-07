@@ -317,7 +317,7 @@ try {
 }
 
 try {
-    $user->setGroupChannelPreference('nonexistent', 'mail', false);
+    $user->setGroupPreferences('nonexistent', 'mail', false);
 } catch (InvalidGroupException $e) {
     // "Group 'nonexistent' is not registered... Available groups: system, marketing."
 }
