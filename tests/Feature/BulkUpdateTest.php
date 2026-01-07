@@ -270,8 +270,19 @@ describe('trait methods', function () {
 });
 
 describe('edge cases', function () {
+    it('throws exception for non-existent group', function () {
+        $this->manager->setGroupPreference($this->user, 'nonexistent', 'mail', false);
+    })->throws(OffloadProject\NotificationPreferences\Exceptions\InvalidGroupException::class);
+
     it('returns zero when group has no notifications', function () {
-        $count = $this->manager->setGroupPreference($this->user, 'nonexistent', 'mail', false);
+        // Use an existing group that has no notifications assigned
+        config()->set('notification-preferences.groups.empty', [
+            'label' => 'Empty Group',
+            'default_preference' => 'opt_in',
+        ]);
+        $this->manager->clearConfigCache();
+
+        $count = $this->manager->setGroupPreference($this->user, 'empty', 'mail', false);
 
         expect($count)->toBe(0);
     });
@@ -302,4 +313,23 @@ describe('edge cases', function () {
         // Should only affect enabled channels (mail and broadcast)
         expect($count)->toBe(2);
     });
+
+    it('throws exception for invalid channel in setChannelPreference', function () {
+        $this->manager->setChannelPreference($this->user, 'invalid_channel', false);
+    })->throws(OffloadProject\NotificationPreferences\Exceptions\InvalidChannelException::class);
+
+    it('throws exception for disabled channel in setChannelPreference', function () {
+        config()->set('notification-preferences.channels.mail.enabled', false);
+        $this->manager->clearConfigCache();
+
+        $this->manager->setChannelPreference($this->user, 'mail', false);
+    })->throws(OffloadProject\NotificationPreferences\Exceptions\InvalidChannelException::class);
+
+    it('throws exception for invalid channel in setGroupPreference', function () {
+        $this->manager->setGroupPreference($this->user, 'system', 'invalid_channel', false);
+    })->throws(OffloadProject\NotificationPreferences\Exceptions\InvalidChannelException::class);
+
+    it('throws exception for invalid notification type in setNotificationPreference', function () {
+        $this->manager->setNotificationPreference($this->user, 'InvalidNotification', false);
+    })->throws(OffloadProject\NotificationPreferences\Exceptions\InvalidNotificationTypeException::class);
 });

@@ -62,6 +62,18 @@ interface NotificationPreferenceManagerInterface
     public function clearUserCache($userId): void;
 
     /**
+     * Clear the memoized config cache.
+     */
+    public function clearConfigCache(): void;
+
+    /**
+     * Reset all preferences for a user to defaults.
+     *
+     * @return int Number of deleted preferences
+     */
+    public function resetUserPreferences(Authenticatable $user): int;
+
+    /**
      * Set preference for all notifications in a group.
      */
     public function setGroupPreference(
@@ -88,4 +100,25 @@ interface NotificationPreferenceManagerInterface
         string $notificationType,
         bool $enabled
     ): int;
+
+    /**
+     * Get all registered channel keys.
+     *
+     * @return array<int, string>
+     */
+    public function getRegisteredChannels(): array;
+
+    /**
+     * Get all registered group keys.
+     *
+     * @return array<int, string>
+     */
+    public function getRegisteredGroups(): array;
+
+    /**
+     * Get all registered notification type class names.
+     *
+     * @return array<int, string>
+     */
+    public function getRegisteredNotifications(): array;
 }

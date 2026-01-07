@@ -4,18 +4,30 @@ declare(strict_types=1);
 
 namespace OffloadProject\NotificationPreferences;
 
+use DateTimeInterface;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use OffloadProject\NotificationPreferences\Contracts\NotificationPreferenceManagerInterface;
+use OffloadProject\NotificationPreferences\DataTransferObjects\ChannelPreferenceData;
+use OffloadProject\NotificationPreferences\DataTransferObjects\NotificationGroupData;
+use OffloadProject\NotificationPreferences\DataTransferObjects\NotificationPreferenceData;
 use OffloadProject\NotificationPreferences\Enums\DefaultPreference;
 use OffloadProject\NotificationPreferences\Events\NotificationPreferenceChanged;
 use OffloadProject\NotificationPreferences\Exceptions\InvalidChannelException;
+use OffloadProject\NotificationPreferences\Exceptions\InvalidGroupException;
 use OffloadProject\NotificationPreferences\Exceptions\InvalidNotificationTypeException;
 use OffloadProject\NotificationPreferences\Models\NotificationPreference;
 
 final class NotificationPreferenceManager implements NotificationPreferenceManagerInterface
 {
+    /**
+     * Memoized config to avoid repeated config() calls.
+     *
+     * @var array<string, mixed>|null
+     */
+    private ?array $configCache = null;
+
     /**
      * Check if a channel is enabled for a user and notification type.
      */
@@ -25,9 +37,10 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         string $channel
     ): bool {
         $userId = $this->getUserId($user);
-        $cacheKey = "notification_prefs.{$userId}.{$notificationType}.{$channel}";
+        $cacheKey = $this->buildCacheKey($userId, $notificationType, $channel);
+        $cacheTtl = $this->getCacheTtl();
 
-        return Cache::remember($cacheKey, now()->addHours(24), function () use ($userId, $notificationType, $channel) {
+        return Cache::remember($cacheKey, $cacheTtl, function () use ($userId, $notificationType, $channel) {
             $preference = NotificationPreference::where('user_id', $userId)
                 ->forNotification($notificationType)
                 ->forChannel($channel)
@@ -53,15 +66,29 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         array $channels
     ): array {
         $config = $this->getConfig();
+        $userId = $this->getUserId($user);
+        $forcedChannels = $config['notifications'][$notificationType]['force_channels'] ?? [];
 
-        return array_values(array_filter($channels, function ($channel) use ($user, $notificationType, $config) {
-            // Check for forced channels that can't be disabled
-            $forcedChannels = $config['notifications'][$notificationType]['force_channels'] ?? [];
+        // Batch fetch all channel preferences for this notification type to avoid N+1 cache calls
+        $cacheKey = $this->buildBatchCacheKey($userId, $notificationType);
+        $cacheTtl = $this->getCacheTtl();
+
+        /** @var array<string, bool> $preferences */
+        $preferences = Cache::remember($cacheKey, $cacheTtl, function () use ($userId, $notificationType) {
+            return NotificationPreference::where('user_id', $userId)
+                ->forNotification($notificationType)
+                ->pluck('enabled', 'channel')
+                ->toArray();
+        });
+
+        return array_values(array_filter($channels, function ($channel) use ($preferences, $forcedChannels, $notificationType) {
+            // Forced channels always send
             if (in_array($channel, $forcedChannels, true)) {
                 return true;
             }
 
-            return $this->isChannelEnabled($user, $notificationType, $channel);
+            // Use cached preference or fall back to default
+            return $preferences[$channel] ?? $this->getDefaultPreference($notificationType, $channel);
         }));
     }
 
@@ -82,13 +109,6 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
 
         $userId = $this->getUserId($user);
 
-        $existingPreference = NotificationPreference::where('user_id', $userId)
-            ->forNotification($notificationType)
-            ->forChannel($channel)
-            ->first();
-
-        $wasCreated = $existingPreference === null;
-
         $preference = NotificationPreference::updateOrCreate(
             [
                 'user_id' => $userId,
@@ -102,7 +122,7 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
 
         $this->clearCache($userId, $notificationType, $channel);
 
-        NotificationPreferenceChanged::dispatch($preference, $user, $wasCreated);
+        NotificationPreferenceChanged::dispatch($preference, $user, $preference->wasRecentlyCreated);
 
         return $preference;
     }
@@ -161,14 +181,21 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         $channels = array_keys($config['channels'] ?? []);
 
         foreach ($notifications as $notificationType) {
+            // Clear batch cache for this notification type
+            Cache::forget($this->buildBatchCacheKey($userId, $notificationType));
+
+            // Clear individual channel caches
             foreach ($channels as $channel) {
-                $this->clearCache($userId, $notificationType, $channel);
+                Cache::forget($this->buildCacheKey($userId, $notificationType, $channel));
             }
         }
     }
 
     /**
      * Set preference for all notifications in a group
+     *
+     * @throws InvalidGroupException
+     * @throws InvalidChannelException
      */
     public function setGroupPreference(
         Authenticatable $user,
@@ -176,6 +203,9 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         string $channel,
         bool $enabled
     ): int {
+        $this->validateGroup($groupKey);
+        $this->validateChannel($channel);
+
         return DB::transaction(function () use ($user, $groupKey, $channel, $enabled) {
             $config = $this->getConfig();
 
@@ -204,12 +234,16 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
 
     /**
      * Set preference for a channel across all notifications
+     *
+     * @throws InvalidChannelException
      */
     public function setChannelPreference(
         Authenticatable $user,
         string $channel,
         bool $enabled
     ): int {
+        $this->validateChannel($channel);
+
         return DB::transaction(function () use ($user, $channel, $enabled) {
             $config = $this->getConfig();
 
@@ -234,12 +268,16 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
 
     /**
      * Set preference for all channels of a notification type
+     *
+     * @throws InvalidNotificationTypeException
      */
     public function setNotificationPreference(
         Authenticatable $user,
         string $notificationType,
         bool $enabled
     ): int {
+        $this->validateNotificationType($notificationType);
+
         return DB::transaction(function () use ($user, $notificationType, $enabled) {
             $config = $this->getConfig();
             $channels = array_keys($this->getEnabledChannels());
@@ -262,6 +300,65 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
 
             return $count;
         });
+    }
+
+    /**
+     * Reset all preferences for a user to defaults.
+     *
+     * @return int Number of deleted preferences
+     */
+    public function resetUserPreferences(Authenticatable $user): int
+    {
+        $userId = $this->getUserId($user);
+        $count = NotificationPreference::where('user_id', $userId)->delete();
+        $this->clearUserCache($userId);
+
+        return $count;
+    }
+
+    /**
+     * Clear the memoized config cache.
+     * Useful for testing or when config changes at runtime.
+     */
+    public function clearConfigCache(): void
+    {
+        $this->configCache = null;
+    }
+
+    /**
+     * Get all registered channel keys.
+     *
+     * @return array<int, string>
+     */
+    public function getRegisteredChannels(): array
+    {
+        $config = $this->getConfig();
+
+        return array_keys($config['channels'] ?? []);
+    }
+
+    /**
+     * Get all registered group keys.
+     *
+     * @return array<int, string>
+     */
+    public function getRegisteredGroups(): array
+    {
+        $config = $this->getConfig();
+
+        return array_keys($config['groups'] ?? []);
+    }
+
+    /**
+     * Get all registered notification type class names.
+     *
+     * @return array<int, string>
+     */
+    public function getRegisteredNotifications(): array
+    {
+        $config = $this->getConfig();
+
+        return array_keys($config['notifications'] ?? []);
     }
 
     /**
@@ -290,11 +387,26 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         $channels = $config['channels'] ?? [];
 
         if (! isset($channels[$channel])) {
-            throw InvalidChannelException::notRegistered($channel);
+            throw InvalidChannelException::notRegistered($channel, array_keys($channels));
         }
 
         if (($channels[$channel]['enabled'] ?? true) === false) {
             throw InvalidChannelException::disabled($channel);
+        }
+    }
+
+    /**
+     * Validate that the group is registered in config.
+     *
+     * @throws InvalidGroupException
+     */
+    private function validateGroup(string $groupKey): void
+    {
+        $config = $this->getConfig();
+        $groups = $config['groups'] ?? [];
+
+        if (! isset($groups[$groupKey])) {
+            throw InvalidGroupException::notRegistered($groupKey, array_keys($groups));
         }
     }
 
@@ -341,7 +453,7 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
     }
 
     /**
-     * Build the final preferences table structure.
+     * Build the final preferences table structure using DTOs.
      *
      * @param  array<string, array<string, array{label?: string, description?: string, force_channels?: array<int, string>}>>  $groupedNotifications
      * @param  array<string, array{label?: string, description?: string}>  $groups
@@ -358,26 +470,28 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         $result = [];
 
         foreach ($groupedNotifications as $groupKey => $groupNotifs) {
-            $result[] = [
-                'group' => $groupKey,
-                'label' => $groups[$groupKey]['label'] ?? ucfirst($groupKey),
-                'description' => $groups[$groupKey]['description'] ?? null,
-                'notifications' => $this->buildNotificationList($groupNotifs, $channels, $userPreferences),
-            ];
+            $groupData = new NotificationGroupData(
+                group: $groupKey,
+                label: $groups[$groupKey]['label'] ?? ucfirst($groupKey),
+                description: $groups[$groupKey]['description'] ?? null,
+                notifications: $this->buildNotificationDtos($groupNotifs, $channels, $userPreferences)
+            );
+
+            $result[] = $groupData->toArray();
         }
 
         return $result;
     }
 
     /**
-     * Build notification list with channel preferences.
+     * Build notification DTOs with channel preferences.
      *
      * @param  array<string, array{label?: string, description?: string, force_channels?: array<int, string>}>  $notifications
      * @param  array<string, array{label: string, enabled: bool}>  $channels
      * @param  \Illuminate\Support\Collection<string, NotificationPreference>  $userPreferences
-     * @return array<int, array{type: string, label: string, description: string|null, channels: array<string, array{enabled: bool, forced: bool}>}>
+     * @return array<int, NotificationPreferenceData>
      */
-    private function buildNotificationList(
+    private function buildNotificationDtos(
         array $notifications,
         array $channels,
         \Illuminate\Support\Collection $userPreferences
@@ -385,31 +499,31 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         $list = [];
 
         foreach ($notifications as $notificationType => $notifConfig) {
-            $list[] = [
-                'type' => $notificationType,
-                'label' => $notifConfig['label'] ?? class_basename($notificationType),
-                'description' => $notifConfig['description'] ?? null,
-                'channels' => $this->buildChannelPreferences(
+            $list[] = new NotificationPreferenceData(
+                type: $notificationType,
+                label: $notifConfig['label'] ?? class_basename($notificationType),
+                description: $notifConfig['description'] ?? null,
+                channels: $this->buildChannelPreferenceDtos(
                     $notificationType,
                     $notifConfig['force_channels'] ?? [],
                     $channels,
                     $userPreferences
-                ),
-            ];
+                )
+            );
         }
 
         return $list;
     }
 
     /**
-     * Build channel preferences for a notification type.
+     * Build channel preference DTOs for a notification type.
      *
      * @param  array<int, string>  $forcedChannels
      * @param  array<string, array{label: string, enabled: bool}>  $channels
      * @param  \Illuminate\Support\Collection<string, NotificationPreference>  $userPreferences
-     * @return array<string, array{enabled: bool, forced: bool}>
+     * @return array<string, ChannelPreferenceData>
      */
-    private function buildChannelPreferences(
+    private function buildChannelPreferenceDtos(
         string $notificationType,
         array $forcedChannels,
         array $channels,
@@ -421,25 +535,26 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
             $prefKey = "{$notificationType}:{$channelKey}";
             $preference = $userPreferences->get($prefKey);
 
-            $channelPrefs[$channelKey] = [
-                'enabled' => $preference !== null
+            $channelPrefs[$channelKey] = new ChannelPreferenceData(
+                channel: $channelKey,
+                enabled: $preference !== null
                     ? $preference->enabled
                     : $this->getDefaultPreference($notificationType, $channelKey),
-                'forced' => in_array($channelKey, $forcedChannels, true),
-            ];
+                forced: in_array($channelKey, $forcedChannels, true)
+            );
         }
 
         return $channelPrefs;
     }
 
     /**
-     * Get fresh config each time to support runtime changes in tests
+     * Get config with memoization to avoid repeated config() calls.
      *
      * @return array<string, mixed>
      */
     private function getConfig(): array
     {
-        return config('notification-preferences', []);
+        return $this->configCache ??= config('notification-preferences', []);
     }
 
     /**
@@ -497,8 +612,49 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
      */
     private function clearCache($userId, string $notificationType, string $channel): void
     {
-        $cacheKey = "notification_prefs.{$userId}.{$notificationType}.{$channel}";
-        Cache::forget($cacheKey);
+        // Clear individual cache key
+        Cache::forget($this->buildCacheKey($userId, $notificationType, $channel));
+        // Also clear batch cache key used by filterChannels
+        Cache::forget($this->buildBatchCacheKey($userId, $notificationType));
+    }
+
+    /**
+     * Build a sanitized cache key for a single preference.
+     *
+     * @param  int|string  $userId
+     */
+    private function buildCacheKey($userId, string $notificationType, string $channel): string
+    {
+        return sprintf(
+            'notification_prefs.%s.%s',
+            $userId,
+            hash('xxh3', "{$notificationType}:{$channel}")
+        );
+    }
+
+    /**
+     * Build a sanitized cache key for batch channel preferences.
+     *
+     * @param  int|string  $userId
+     */
+    private function buildBatchCacheKey($userId, string $notificationType): string
+    {
+        return sprintf(
+            'notification_prefs.%s.batch.%s',
+            $userId,
+            hash('xxh3', $notificationType)
+        );
+    }
+
+    /**
+     * Get the cache TTL from config.
+     */
+    private function getCacheTtl(): DateTimeInterface
+    {
+        $config = $this->getConfig();
+        $minutes = $config['cache_ttl'] ?? 1440; // Default 24 hours
+
+        return now()->addMinutes($minutes);
     }
 
     /**

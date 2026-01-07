@@ -10,9 +10,15 @@ return new class() extends Migration
 {
     public function up(): void
     {
-        Schema::create(config('notification-preferences.table_name', 'notification_preferences'), function (Blueprint $table) {
+        $tableName = config('notification-preferences.table_name', 'notification_preferences');
+
+        /** @var class-string<Illuminate\Database\Eloquent\Model> $userModel */
+        $userModel = config('notification-preferences.user_model', 'App\\Models\\User');
+        $userTable = (new $userModel())->getTable();
+
+        Schema::create($tableName, function (Blueprint $table) use ($userTable) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained($userTable)->cascadeOnDelete();
             $table->string('notification_type'); // Fully qualified class name
             $table->string('channel'); // mail, database, broadcast, etc.
             $table->boolean('enabled')->default(true);

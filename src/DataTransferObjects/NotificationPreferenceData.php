@@ -21,16 +21,14 @@ final readonly class NotificationPreferenceData
      */
     public function toArray(): array
     {
-        $channels = [];
-        foreach ($this->channels as $key => $channel) {
-            $channels[$key] = $channel->toArray();
-        }
-
         return [
             'type' => $this->type,
             'label' => $this->label,
             'description' => $this->description,
-            'channels' => $channels,
+            'channels' => array_map(
+                fn (ChannelPreferenceData $channel) => $channel->toArray(),
+                $this->channels
+            ),
         ];
     }
 }

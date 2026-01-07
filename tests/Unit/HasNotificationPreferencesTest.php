@@ -76,3 +76,71 @@ it('can get notification preferences table', function () {
     expect($table)->toBeArray()
         ->and($table[0])->toHaveKeys(['group', 'label', 'notifications']);
 });
+
+it('can reset notification preferences', function () {
+    // Set some preferences
+    $this->user->setNotificationPreference(TestNotification::class, 'mail', false);
+    $this->user->setNotificationPreference(TestNotification::class, 'database', true);
+
+    expect($this->user->getNotificationPreferences())->toHaveCount(2);
+
+    // Reset all preferences
+    $count = $this->user->resetNotificationPreferences();
+
+    expect($count)->toBe(2)
+        ->and($this->user->getNotificationPreferences())->toHaveCount(0);
+});
+
+it('returns zero when resetting with no preferences', function () {
+    $count = $this->user->resetNotificationPreferences();
+
+    expect($count)->toBe(0);
+});
+
+it('restores defaults after resetting preferences', function () {
+    // Disable mail (default is opt_in = true)
+    $this->user->setNotificationPreference(TestNotification::class, 'mail', false);
+
+    expect($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeFalse();
+
+    // Reset preferences
+    $this->user->resetNotificationPreferences();
+
+    // Should now return default (opt_in = true)
+    expect($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeTrue();
+});
+
+it('can use setChannelPreferences for bulk channel updates', function () {
+    $count = $this->user->setChannelPreferences('mail', false);
+
+    expect($count)->toBe(1)
+        ->and($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeFalse();
+});
+
+it('can use setGroupPreferences for bulk group updates', function () {
+    $count = $this->user->setGroupPreferences('test', 'mail', false);
+
+    expect($count)->toBe(1)
+        ->and($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeFalse();
+});
+
+it('can use setNotificationChannelPreferences for bulk notification updates', function () {
+    $count = $this->user->setNotificationChannelPreferences(TestNotification::class, false);
+
+    expect($count)->toBe(2) // mail and database
+        ->and($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeFalse()
+        ->and($this->user->getNotificationPreference(TestNotification::class, 'database'))->toBeFalse();
+});
+
+it('deprecated methods still work as aliases', function () {
+    // These should work but are deprecated
+    $this->user->setChannelPreferenceForAll('mail', false);
+    expect($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeFalse();
+
+    $this->user->setChannelPreferenceForAll('mail', true);
+    $this->user->setGroupChannelPreference('test', 'mail', false);
+    expect($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeFalse();
+
+    $this->user->setAllChannelsForNotification(TestNotification::class, true);
+    expect($this->user->getNotificationPreference(TestNotification::class, 'mail'))->toBeTrue();
+});
