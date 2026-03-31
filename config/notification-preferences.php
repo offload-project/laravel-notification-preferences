@@ -151,8 +151,8 @@ return [
         // Signed URL TTL in minutes (null for permanent/non-expiring)
         'url_ttl' => null,
 
-        // After unsubscribing, redirect to this URL instead of showing the default view
-        // Set to null to show the default view
+        // After unsubscribing, redirect to this URL (with status and notification_type query params)
+        // Set to null to return a JSON response instead
         'redirect_url' => null,
 
         // Enable resubscribe functionality

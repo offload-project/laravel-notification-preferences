@@ -59,9 +59,12 @@ final class UnsubscribeController extends Controller
         $redirectUrl = config('notification-preferences.unsubscribe.redirect_url');
 
         if ($redirectUrl) {
-            return redirect($redirectUrl.'?'.http_build_query([
+            $separator = str_contains($redirectUrl, '?') ? '&' : '?';
+
+            return redirect($redirectUrl.$separator.http_build_query([
                 'status' => $status,
                 'notification_type' => $notificationType,
+                'channel' => $channel,
             ]));
         }
 

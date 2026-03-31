@@ -20,6 +20,7 @@ use OffloadProject\NotificationPreferences\Exceptions\InvalidChannelException;
 use OffloadProject\NotificationPreferences\Exceptions\InvalidGroupException;
 use OffloadProject\NotificationPreferences\Exceptions\InvalidNotificationTypeException;
 use OffloadProject\NotificationPreferences\Models\NotificationPreference;
+use RuntimeException;
 
 final class NotificationPreferenceManager implements NotificationPreferenceManagerInterface
 {
@@ -321,6 +322,7 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
     /**
      * Generate a signed unsubscribe URL for a user and notification type.
      *
+     * @throws RuntimeException
      * @throws InvalidNotificationTypeException
      * @throws InvalidChannelException
      */
@@ -329,6 +331,10 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         string $notificationType,
         string $channel = 'mail'
     ): string {
+        if (! config('notification-preferences.unsubscribe.enabled', true)) {
+            throw new RuntimeException('Unsubscribe routes are disabled. Enable them via the notification-preferences.unsubscribe.enabled config option.');
+        }
+
         $this->validateNotificationType($notificationType);
         $this->validateChannel($channel);
 
@@ -354,6 +360,7 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
     /**
      * Generate a signed resubscribe URL for a user and notification type.
      *
+     * @throws RuntimeException
      * @throws InvalidNotificationTypeException
      * @throws InvalidChannelException
      */
@@ -362,6 +369,14 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         string $notificationType,
         string $channel = 'mail'
     ): string {
+        if (! config('notification-preferences.unsubscribe.enabled', true)) {
+            throw new RuntimeException('Unsubscribe routes are disabled. Enable them via the notification-preferences.unsubscribe.enabled config option.');
+        }
+
+        if (! config('notification-preferences.unsubscribe.resubscribe_enabled', true)) {
+            throw new RuntimeException('Resubscribe routes are disabled. Enable them via the notification-preferences.unsubscribe.resubscribe_enabled config option.');
+        }
+
         $this->validateNotificationType($notificationType);
         $this->validateChannel($channel);
 

@@ -19,6 +19,7 @@ and automatic channel filtering — perfect for building notification settings U
 - **Structured Output** — UI-ready table structure for building preference pages
 - **Opt-in/Opt-out Defaults** — Configure default behavior at global, group, or notification level
 - **Event Dispatching** — Listen for preference changes for audit logging or sync
+- **Email Unsubscribe Links** — Signed URLs for one-click unsubscribe with `List-Unsubscribe` header support
 - **Input Validation** — Prevents setting preferences for unregistered notifications/channels
 
 ## Requirements
@@ -323,6 +324,101 @@ try {
 }
 ```
 
+## Email Unsubscribe Links
+
+The package can generate signed URLs that let users unsubscribe directly from emails — no login required. It also supports `List-Unsubscribe` headers for native unsubscribe buttons in Gmail, Apple Mail, and other clients (RFC 8058).
+
+### Adding Unsubscribe Links to Notifications
+
+Use the `HasUnsubscribeUrl` trait on your notification class:
+
+```php
+use OffloadProject\NotificationPreferences\Concerns\HasUnsubscribeUrl;
+
+class OrderShipped extends Notification
+{
+    use HasUnsubscribeUrl;
+
+    public function toMail($notifiable): MailMessage
+    {
+        return $this->withUnsubscribeHeaders(
+            (new MailMessage)
+                ->line('Your order has shipped!')
+                ->action('Unsubscribe', $this->getUnsubscribeUrl($notifiable)),
+            $notifiable
+        );
+    }
+}
+```
+
+`withUnsubscribeHeaders()` adds `List-Unsubscribe` and `List-Unsubscribe-Post` headers so email clients can show native unsubscribe buttons. The `getUnsubscribeUrl()` method generates a signed URL you can place anywhere in the email body.
+
+### Generating URLs Directly
+
+You can also generate URLs from the user model or facade:
+
+```php
+// From the user model
+$url = $user->notificationUnsubscribeUrl(OrderShipped::class);
+$url = $user->notificationResubscribeUrl(OrderShipped::class);
+
+// From the facade
+use OffloadProject\NotificationPreferences\Facades\NotificationPreferences;
+
+$url = NotificationPreferences::unsubscribeUrl($user, OrderShipped::class);
+$url = NotificationPreferences::resubscribeUrl($user, OrderShipped::class);
+
+// For a specific channel (defaults to 'mail')
+$url = NotificationPreferences::unsubscribeUrl($user, OrderShipped::class, 'database');
+```
+
+### How It Works
+
+When a user clicks the unsubscribe link, the package:
+
+1. Validates the signed URL (tamper-proof, no auth required)
+2. Disables the notification type for that channel
+3. Returns a JSON response, or redirects to your configured URL
+
+The POST method is also supported for RFC 8058 one-click unsubscribe from email clients.
+
+### Configuration
+
+```php
+// config/notification-preferences.php
+'unsubscribe' => [
+    // Whether to register unsubscribe routes
+    'enabled' => true,
+
+    // Route prefix for unsubscribe/resubscribe endpoints
+    'route_prefix' => 'notification-preferences',
+
+    // Middleware for the unsubscribe routes
+    'middleware' => ['web'],
+
+    // Signed URL TTL in minutes (null for permanent/non-expiring)
+    'url_ttl' => null,
+
+    // Redirect to this URL after unsubscribing (with status, notification_type, and channel query params)
+    // Set to null to return a JSON response instead
+    'redirect_url' => null,
+
+    // Enable resubscribe functionality
+    'resubscribe_enabled' => true,
+],
+```
+
+### Redirect Example
+
+When `redirect_url` is set, users are redirected after unsubscribing:
+
+```php
+'redirect_url' => '/notification-settings',
+// Redirects to: /notification-settings?status=unsubscribed&notification_type=App\Notifications\OrderShipped&channel=mail
+```
+
+This lets you handle the confirmation page in your own frontend (Blade, Inertia, Livewire, etc.).
+
 ## Uninstalling
 
 ```bash
@@ -369,6 +465,17 @@ rm config/notification-preferences.php
 | `default_channels`   | array  | Specific channels enabled by default    |
 | `force_channels`     | array  | Channels that cannot be disabled        |
 | `order`              | int    | Sort order within group                 |
+
+### Unsubscribe
+
+| Option                | Type        | Description                                                     |
+|-----------------------|-------------|-----------------------------------------------------------------|
+| `enabled`             | bool        | Register unsubscribe routes (default: true)                     |
+| `route_prefix`        | string      | URL prefix for routes (default: notification-preferences)       |
+| `middleware`          | array       | Middleware stack for routes (default: ['web'])                   |
+| `url_ttl`             | int\|null   | Signed URL expiration in minutes (null = permanent)             |
+| `redirect_url`        | string\|null| Redirect after action, or null for JSON response               |
+| `resubscribe_enabled` | bool        | Register resubscribe route (default: true)                      |
 
 ## Testing
 
