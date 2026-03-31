@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/offload-project/laravel-notification-preferences/compare/v1.1.0...v1.1.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* auto-generated index name exceeds MySQL/MariaDB's 64-character index name limit ([6664a66](https://github.com/offload-project/laravel-notification-preferences/commit/6664a6678d0916ed03b8629b51e2e7c144d38c32))
+
 ## [1.1.0](https://github.com/offload-project/laravel-notification-preferences/compare/v1.0.0...v1.1.0) (2026-01-07)
 
 
