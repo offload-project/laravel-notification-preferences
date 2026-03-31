@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/offload-project/laravel-notification-preferences/compare/v1.1.1...v1.2.0) (2026-03-31)
+
+
+### Features
+
+* add Laravel 13 support ([e715248](https://github.com/offload-project/laravel-notification-preferences/commit/e7152487b9a3d9e43028bdb24e4807cbbb8b8e80))
+
 ## [1.1.1](https://github.com/offload-project/laravel-notification-preferences/compare/v1.1.0...v1.1.1) (2026-03-31)
 
 
