@@ -34,6 +34,11 @@ final class NotificationPreferencesServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'notification-preferences-migrations');
 
+        // Register unsubscribe routes
+        if (config('notification-preferences.unsubscribe.enabled', true)) {
+            $this->loadRoutesFrom(__DIR__.'/Http/routes.php');
+        }
+
         // Register automatic channel filtering
         Event::listen(
             NotificationSending::class,
