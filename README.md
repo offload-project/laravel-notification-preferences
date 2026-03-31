@@ -24,7 +24,7 @@ and automatic channel filtering — perfect for building notification settings U
 ## Requirements
 
 - PHP 8.3+
-- Laravel 11+
+- Laravel 11/12/13
 
 ## Installation
 
