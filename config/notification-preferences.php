@@ -127,4 +127,35 @@ return [
     |
     */
     'user_model' => 'App\\Models\\User',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Unsubscribe Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the signed URL-based unsubscribe feature. When enabled, the
+    | package registers routes for handling unsubscribe/resubscribe actions
+    | and provides helpers for generating signed URLs in email notifications.
+    |
+    */
+    'unsubscribe' => [
+        // Whether to register unsubscribe routes
+        'enabled' => true,
+
+        // Route prefix for unsubscribe/resubscribe endpoints
+        'route_prefix' => 'notification-preferences',
+
+        // Middleware for the unsubscribe routes
+        'middleware' => ['web'],
+
+        // Signed URL TTL in minutes (null for permanent/non-expiring)
+        'url_ttl' => null,
+
+        // After unsubscribing, redirect to this URL instead of showing the default view
+        // Set to null to show the default view
+        'redirect_url' => null,
+
+        // Enable resubscribe functionality
+        'resubscribe_enabled' => true,
+    ],
 ];
