@@ -121,6 +121,24 @@ trait HasNotificationPreferences
     }
 
     /**
+     * Get a signed unsubscribe URL for this user and notification type.
+     */
+    public function notificationUnsubscribeUrl(string $notificationType, string $channel = 'mail'): string
+    {
+        return $this->notificationPreferenceManager()
+            ->unsubscribeUrl($this, $notificationType, $channel);
+    }
+
+    /**
+     * Get a signed resubscribe URL for this user and notification type.
+     */
+    public function notificationResubscribeUrl(string $notificationType, string $channel = 'mail'): string
+    {
+        return $this->notificationPreferenceManager()
+            ->resubscribeUrl($this, $notificationType, $channel);
+    }
+
+    /**
      * Reset all notification preferences to defaults.
      *
      * @return int Number of deleted preferences
