@@ -11,6 +11,7 @@ Route::group([
 ], function () {
     Route::match(['get', 'post'], 'unsubscribe', [UnsubscribeController::class, 'unsubscribe'])
         ->name('notification-preferences.unsubscribe')
+        ->withoutMiddleware(Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
         ->middleware('signed');
 
     if (config('notification-preferences.unsubscribe.resubscribe_enabled', true)) {
