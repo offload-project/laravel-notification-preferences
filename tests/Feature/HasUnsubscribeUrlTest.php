@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Illuminate\Notifications\Messages\MailMessage;
-use OffloadProject\NotificationPreferences\Concerns\HasUnsubscribeUrl;
 use OffloadProject\NotificationPreferences\NotificationPreferenceManager;
 use OffloadProject\NotificationPreferences\Tests\Models\User;
 use OffloadProject\NotificationPreferences\Tests\Notifications\UnsubscribeTestNotification;
@@ -56,13 +55,13 @@ it('adds List-Unsubscribe headers to mail message', function () {
 
     // Verify callbacks are registered by checking the mail message has them
     // We test the actual header application by invoking the callbacks on a Symfony message
-    $symfonyMessage = new \Symfony\Component\Mime\Email();
+    $symfonyMessage = new Symfony\Component\Mime\Email();
     $symfonyMessage->from('test@example.com');
     $symfonyMessage->to('recipient@example.com');
 
     // The withSymfonyMessage callbacks are stored and applied during send
     // We can access them via reflection or test the integration
-    $reflection = new \ReflectionProperty(MailMessage::class, 'callbacks');
+    $reflection = new ReflectionProperty(MailMessage::class, 'callbacks');
     $callbacks = $reflection->getValue($mailMessage);
 
     expect($callbacks)->toHaveCount(1);
@@ -81,11 +80,11 @@ it('wraps unsubscribe URL in angle brackets in List-Unsubscribe header', functio
     $notification = new UnsubscribeTestNotification();
     $mailMessage = $notification->toMail($this->user);
 
-    $symfonyMessage = new \Symfony\Component\Mime\Email();
+    $symfonyMessage = new Symfony\Component\Mime\Email();
     $symfonyMessage->from('test@example.com');
     $symfonyMessage->to('recipient@example.com');
 
-    $reflection = new \ReflectionProperty(MailMessage::class, 'callbacks');
+    $reflection = new ReflectionProperty(MailMessage::class, 'callbacks');
     $callbacks = $reflection->getValue($mailMessage);
     $callbacks[0]($symfonyMessage);
 

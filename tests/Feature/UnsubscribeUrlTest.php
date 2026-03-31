@@ -37,7 +37,7 @@ it('generates a signed unsubscribe URL', function () {
 
     expect($url)->toBeString()
         ->toContain('notification-preferences/unsubscribe')
-        ->toContain('user_id=' . $this->user->id)
+        ->toContain('user_id='.$this->user->id)
         ->toContain('signature=');
 });
 
@@ -46,7 +46,7 @@ it('generates a signed resubscribe URL', function () {
 
     expect($url)->toBeString()
         ->toContain('notification-preferences/resubscribe')
-        ->toContain('user_id=' . $this->user->id)
+        ->toContain('user_id='.$this->user->id)
         ->toContain('signature=');
 });
 
