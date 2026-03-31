@@ -38,6 +38,8 @@ final class UnsubscribeController extends Controller
 
         /** @var class-string<\Illuminate\Database\Eloquent\Model&\Illuminate\Contracts\Auth\Authenticatable> $userModel */
         $userModel = config('notification-preferences.user_model', 'App\\Models\\User');
+
+        /** @var (\Illuminate\Database\Eloquent\Model&\Illuminate\Contracts\Auth\Authenticatable)|null $user */
         $user = $userModel::find($userId);
 
         if (! $user) {
