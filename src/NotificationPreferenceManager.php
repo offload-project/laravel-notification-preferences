@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace OffloadProject\NotificationPreferences;
 
+use Carbon\CarbonInterval;
 use DateTimeInterface;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use OffloadProject\NotificationPreferences\Contracts\NotificationPreferenceManagerInterface;
 use OffloadProject\NotificationPreferences\DataTransferObjects\ChannelPreferenceData;
 use OffloadProject\NotificationPreferences\DataTransferObjects\NotificationGroupData;
@@ -314,6 +316,72 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         $this->clearUserCache($userId);
 
         return $count;
+    }
+
+    /**
+     * Generate a signed unsubscribe URL for a user and notification type.
+     *
+     * @throws InvalidNotificationTypeException
+     * @throws InvalidChannelException
+     */
+    public function unsubscribeUrl(
+        Authenticatable $user,
+        string $notificationType,
+        string $channel = 'mail'
+    ): string {
+        $this->validateNotificationType($notificationType);
+        $this->validateChannel($channel);
+
+        $parameters = [
+            'user_id' => $this->getUserId($user),
+            'notification_type' => $notificationType,
+            'channel' => $channel,
+        ];
+
+        $ttl = config('notification-preferences.unsubscribe.url_ttl');
+
+        if ($ttl !== null) {
+            return URL::temporarySignedRoute(
+                'notification-preferences.unsubscribe',
+                CarbonInterval::minutes($ttl),
+                $parameters
+            );
+        }
+
+        return URL::signedRoute('notification-preferences.unsubscribe', $parameters);
+    }
+
+    /**
+     * Generate a signed resubscribe URL for a user and notification type.
+     *
+     * @throws InvalidNotificationTypeException
+     * @throws InvalidChannelException
+     */
+    public function resubscribeUrl(
+        Authenticatable $user,
+        string $notificationType,
+        string $channel = 'mail'
+    ): string {
+        $this->validateNotificationType($notificationType);
+        $this->validateChannel($channel);
+
+        $parameters = [
+            'user_id' => $this->getUserId($user),
+            'notification_type' => $notificationType,
+            'channel' => $channel,
+        ];
+
+        $ttl = config('notification-preferences.unsubscribe.url_ttl');
+
+        if ($ttl !== null) {
+            return URL::temporarySignedRoute(
+                'notification-preferences.resubscribe',
+                CarbonInterval::minutes($ttl),
+                $parameters
+            );
+        }
+
+        return URL::signedRoute('notification-preferences.resubscribe', $parameters);
     }
 
     /**
