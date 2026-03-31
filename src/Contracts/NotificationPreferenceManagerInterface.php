@@ -102,6 +102,24 @@ interface NotificationPreferenceManagerInterface
     ): int;
 
     /**
+     * Generate a signed unsubscribe URL for a user and notification type.
+     */
+    public function unsubscribeUrl(
+        Authenticatable $user,
+        string $notificationType,
+        string $channel = 'mail'
+    ): string;
+
+    /**
+     * Generate a signed resubscribe URL for a user and notification type.
+     */
+    public function resubscribeUrl(
+        Authenticatable $user,
+        string $notificationType,
+        string $channel = 'mail'
+    ): string;
+
+    /**
      * Get all registered channel keys.
      *
      * @return array<int, string>

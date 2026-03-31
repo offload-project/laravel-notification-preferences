@@ -24,6 +24,8 @@ use OffloadProject\NotificationPreferences\Models\NotificationPreference;
  * @method static array getRegisteredChannels()
  * @method static array getRegisteredGroups()
  * @method static array getRegisteredNotifications()
+ * @method static string unsubscribeUrl(Authenticatable $user, string $notificationType, string $channel = 'mail')
+ * @method static string resubscribeUrl(Authenticatable $user, string $notificationType, string $channel = 'mail')
  *
  * @see \OffloadProject\NotificationPreferences\NotificationPreferenceManager
  */
