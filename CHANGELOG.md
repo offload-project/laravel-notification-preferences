@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4.0 - 2026-05-09
+
+### Added
+- Permission-based notification gating [#12](https://github.com/offload-project/laravel-notification-preferences/pull/12)
+
 ## v1.3.0 - 2026-03-31
 
 ### Added
