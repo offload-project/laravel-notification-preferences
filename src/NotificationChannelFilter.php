@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace OffloadProject\NotificationPreferences;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Notifications\Events\NotificationSending;
+use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Gate;
 use OffloadProject\NotificationPreferences\Concerns\ChecksNotificationPreferences;
+use OffloadProject\NotificationPreferences\Contracts\AuthorizesNotification;
+use OffloadProject\NotificationPreferences\Events\NotificationAuthorizationDenied;
 use ReflectionClass;
 
 final class NotificationChannelFilter
@@ -28,6 +33,13 @@ final class NotificationChannelFilter
     public function handle(NotificationSending $event): bool
     {
         $notificationClass = get_class($event->notification);
+
+        // Authorization runs first — it overrides preferences, forced channels,
+        // and self-filtering traits. If a user can't access the underlying
+        // resource, no preference toggle should let the notification through.
+        if (! $this->passesAuthorization($event->notifiable, $event->notification, $event->channel, $notificationClass)) {
+            return false;
+        }
 
         // If notification uses the ChecksNotificationPreferences trait,
         // it handles its own filtering
@@ -55,6 +67,49 @@ final class NotificationChannelFilter
             $notificationClass,
             $channel
         );
+    }
+
+    /**
+     * Resolve and run the Gate ability for this notification, if any.
+     *
+     * @param  class-string  $notificationClass
+     */
+    private function passesAuthorization(
+        Authenticatable $notifiable,
+        Notification $notification,
+        string $channel,
+        string $notificationClass
+    ): bool {
+        $ability = $this->resolveAbility($notificationClass);
+
+        if ($ability === null) {
+            return true;
+        }
+
+        if (Gate::forUser($notifiable)->allows($ability, [$notification])) {
+            return true;
+        }
+
+        NotificationAuthorizationDenied::dispatch($notifiable, $notification, $channel, $ability);
+
+        return false;
+    }
+
+    /**
+     * Resolve the ability for a notification class.
+     * Interface takes precedence over config.
+     *
+     * @param  class-string  $notificationClass
+     */
+    private function resolveAbility(string $notificationClass): ?string
+    {
+        if (is_subclass_of($notificationClass, AuthorizesNotification::class)) {
+            return $notificationClass::notificationAbility();
+        }
+
+        $ability = config("notification-preferences.notifications.{$notificationClass}.ability");
+
+        return is_string($ability) && $ability !== '' ? $ability : null;
     }
 
     /**

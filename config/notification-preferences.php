@@ -93,6 +93,7 @@ return [
         //     'default_preference' => 'opt_in', // optional, overrides group default
         //     'default_channels' => ['mail', 'database'], // optional, specific defaults per channel
         //     'force_channels' => [], // optional, channels that can't be disabled
+        //     'ability' => 'view-orders', // optional, Gate ability the user must pass to receive this notification (also hides it from the preferences UI). For notifications you own, prefer implementing the AuthorizesNotification interface.
         //     'order' => 1,
         // ],
     ],
