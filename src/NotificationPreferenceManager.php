@@ -9,7 +9,9 @@ use DateTimeInterface;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
+use OffloadProject\NotificationPreferences\Contracts\AuthorizesNotification;
 use OffloadProject\NotificationPreferences\Contracts\NotificationPreferenceManagerInterface;
 use OffloadProject\NotificationPreferences\DataTransferObjects\ChannelPreferenceData;
 use OffloadProject\NotificationPreferences\DataTransferObjects\NotificationGroupData;
@@ -167,7 +169,8 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
 
         $channels = $this->getEnabledChannels();
         $userPreferences = $this->getUserPreferencesKeyed($userId);
-        $groupedNotifications = $this->groupAndSortNotifications($notifications, $groups);
+        $authorizedNotifications = $this->filterAuthorizedNotifications($notifications, $user);
+        $groupedNotifications = $this->groupAndSortNotifications($authorizedNotifications, $groups);
 
         return $this->buildPreferencesTable($groupedNotifications, $groups, $channels, $userPreferences);
     }
@@ -442,6 +445,41 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
         $config = $this->getConfig();
 
         return array_keys($config['notifications'] ?? []);
+    }
+
+    /**
+     * Drop notification types the user is not authorized to receive.
+     * Mirrors the dispatch-time filter so the UI can't expose toggles
+     * for notifications the user couldn't actually receive.
+     *
+     * @param  array<string, array{ability?: string}>  $notifications
+     * @return array<string, array<string, mixed>>
+     */
+    private function filterAuthorizedNotifications(array $notifications, Authenticatable $user): array
+    {
+        return array_filter(
+            $notifications,
+            fn (array $config, string $class) => $this->userCanAccessNotification($user, $class, $config),
+            ARRAY_FILTER_USE_BOTH
+        );
+    }
+
+    /**
+     * @param  array{ability?: string}  $config
+     */
+    private function userCanAccessNotification(Authenticatable $user, string $notificationClass, array $config): bool
+    {
+        if (is_subclass_of($notificationClass, AuthorizesNotification::class)) {
+            return Gate::forUser($user)->allows($notificationClass::notificationAbility());
+        }
+
+        $ability = $config['ability'] ?? null;
+
+        if (! is_string($ability) || $ability === '') {
+            return true;
+        }
+
+        return Gate::forUser($user)->allows($ability);
     }
 
     /**

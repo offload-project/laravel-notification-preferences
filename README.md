@@ -15,6 +15,7 @@ and automatic channel filtering — perfect for building notification settings U
 - **Multiple Channels** — Support for mail, database, broadcast, SMS, or custom channels
 - **Notification Grouping** — Organize notifications into logical groups (system, marketing, etc.)
 - **Forced Channels** — Critical notifications that users cannot disable
+- **Permission Gating** — Hook into Laravel's Gate to hide and block notifications users aren't authorized to receive
 - **Bulk Operations** — Disable all emails, mute a group, or toggle notification types
 - **Structured Output** — UI-ready table structure for building preference pages
 - **Opt-in/Opt-out Defaults** — Configure default behavior at global, group, or notification level
@@ -157,6 +158,54 @@ Prevent users from disabling critical notifications:
 ],
 ```
 
+## Permission Gating
+
+Tie notifications to a Gate ability so users only see — and only receive — notifications they're authorized for. Works with native policies, Spatie Permission, Bouncer, or any package that registers with Laravel's Gate.
+
+**Option 1: Implement the interface** (recommended for notifications you own):
+
+```php
+use OffloadProject\NotificationPreferences\Contracts\AuthorizesNotification;
+
+class OrderShipped extends Notification implements AuthorizesNotification
+{
+    public static function notificationAbility(): string
+    {
+        return 'view-orders';
+    }
+}
+```
+
+**Option 2: Declare the ability in config** (for notifications from other packages):
+
+```php
+'notifications' => [
+    \Vendor\Package\SomeNotification::class => [
+        'group' => 'system',
+        'label' => 'Vendor notification',
+        'ability' => 'view-orders',
+    ],
+],
+```
+
+When a user fails the Gate check:
+
+- Dispatch is blocked across **all channels** — authorization overrides forced channels and self-filtering traits.
+- The notification is hidden from `getPreferencesTable()` so the UI doesn't expose toggles for things they can't access.
+- A `NotificationAuthorizationDenied` event is dispatched per blocked channel for observability.
+
+The notification instance is passed to your Gate closure at dispatch time, so you can authorize against the payload:
+
+```php
+Gate::define('view-orders', function (User $user, ?OrderShipped $notification = null) {
+    // $notification is null when called from the preferences UI (no instance exists)
+    if ($notification) {
+        return $user->can('view', $notification->order);
+    }
+    return $user->can('view-orders');
+});
+```
+
 ## Per-Channel Defaults
 
 Set specific channels enabled by default:
@@ -182,6 +231,19 @@ Event::listen(NotificationPreferenceChanged::class, function ($event) {
     // $event->preference - The NotificationPreference model
     // $event->user - The user who changed the preference
     // $event->wasCreated - Whether this was a new preference or update
+});
+```
+
+`NotificationAuthorizationDenied` is dispatched whenever a notification is blocked by a failing Gate check (see [Permission Gating](#permission-gating)):
+
+```php
+use OffloadProject\NotificationPreferences\Events\NotificationAuthorizationDenied;
+
+Event::listen(NotificationAuthorizationDenied::class, function ($event) {
+    // $event->notifiable   - The user the notification was being sent to
+    // $event->notification - The notification instance
+    // $event->channel      - The channel that was blocked
+    // $event->ability      - The Gate ability that failed
 });
 ```
 
@@ -464,6 +526,7 @@ rm config/notification-preferences.php
 | `default_preference` | string | `opt_in` or `opt_out` (overrides group) |
 | `default_channels`   | array  | Specific channels enabled by default    |
 | `force_channels`     | array  | Channels that cannot be disabled        |
+| `ability`            | string | Gate ability the user must pass to receive (also hides from preferences UI). Prefer the `AuthorizesNotification` interface for notifications you own. |
 | `order`              | int    | Sort order within group                 |
 
 ### Unsubscribe
