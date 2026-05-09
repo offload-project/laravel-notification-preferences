@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -43,7 +44,7 @@ beforeEach(function () {
 });
 
 it('blocks dispatch when interface ability fails', function () {
-    Gate::define('view-orders', fn () => false);
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
 
     $event = new NotificationSending(
         $this->user,
@@ -55,7 +56,7 @@ it('blocks dispatch when interface ability fails', function () {
 });
 
 it('allows dispatch when interface ability passes', function () {
-    Gate::define('view-orders', fn () => true);
+    Gate::define('view-orders', fn ($user, $notification = null) => true);
 
     $event = new NotificationSending(
         $this->user,
@@ -67,7 +68,7 @@ it('allows dispatch when interface ability passes', function () {
 });
 
 it('blocks dispatch when config-defined ability fails', function () {
-    Gate::define('view-orders', fn () => false);
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
 
     $event = new NotificationSending(
         $this->user,
@@ -95,7 +96,7 @@ it('passes the notification instance to the Gate closure', function () {
 });
 
 it('authorization overrides forced channels', function () {
-    Gate::define('view-orders', fn () => false);
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
 
     config()->set('notification-preferences.notifications', [
         AuthorizedNotification::class => [
@@ -112,6 +113,18 @@ it('authorization overrides forced channels', function () {
     );
 
     expect($this->filter->handle($event))->toBeFalse();
+});
+
+it('lets anonymous notifiables through without authorization checks', function () {
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
+
+    $event = new NotificationSending(
+        new AnonymousNotifiable(),
+        new AuthorizedNotification(),
+        'mail'
+    );
+
+    expect($this->filter->handle($event))->toBeTrue();
 });
 
 it('passes through when no ability is defined', function () {
@@ -133,7 +146,7 @@ it('passes through when no ability is defined', function () {
 
 it('dispatches NotificationAuthorizationDenied when blocked', function () {
     Event::fake([NotificationAuthorizationDenied::class]);
-    Gate::define('view-orders', fn () => false);
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
 
     $notification = new AuthorizedNotification();
     $event = new NotificationSending($this->user, $notification, 'mail');
@@ -148,7 +161,7 @@ it('dispatches NotificationAuthorizationDenied when blocked', function () {
 });
 
 it('hides unauthorized notifications from preferences table', function () {
-    Gate::define('view-orders', fn () => false);
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
 
     $table = $this->manager->getPreferencesTable($this->user);
 
@@ -156,7 +169,7 @@ it('hides unauthorized notifications from preferences table', function () {
 });
 
 it('shows authorized notifications in preferences table', function () {
-    Gate::define('view-orders', fn () => true);
+    Gate::define('view-orders', fn ($user, $notification = null) => true);
 
     $table = $this->manager->getPreferencesTable($this->user);
 
@@ -172,8 +185,8 @@ it('shows mixed authorization correctly in preferences table', function () {
     // Give each notification a distinct ability so we can deny one and allow the other.
     config()->set('notification-preferences.notifications.'.AutoFilteredNotification::class.'.ability', 'view-newsletter');
 
-    Gate::define('view-orders', fn () => false);
-    Gate::define('view-newsletter', fn () => true);
+    Gate::define('view-orders', fn ($user, $notification = null) => false);
+    Gate::define('view-newsletter', fn ($user, $notification = null) => true);
 
     $table = $this->manager->getPreferencesTable($this->user);
     $types = collect($table)
