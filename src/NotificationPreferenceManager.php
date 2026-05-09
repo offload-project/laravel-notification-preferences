@@ -448,38 +448,40 @@ final class NotificationPreferenceManager implements NotificationPreferenceManag
     }
 
     /**
+     * Resolve the Gate ability for a notification class. Interface takes
+     * precedence over config. Shared by the dispatch filter and the
+     * preferences UI so precedence rules can't drift between them.
+     */
+    public function resolveAbility(string $notificationClass): ?string
+    {
+        if (is_subclass_of($notificationClass, AuthorizesNotification::class)) {
+            return $notificationClass::notificationAbility();
+        }
+
+        $ability = config("notification-preferences.notifications.{$notificationClass}.ability");
+
+        return is_string($ability) && $ability !== '' ? $ability : null;
+    }
+
+    /**
      * Drop notification types the user is not authorized to receive.
      * Mirrors the dispatch-time filter so the UI can't expose toggles
      * for notifications the user couldn't actually receive.
      *
-     * @param  array<string, array{ability?: string}>  $notifications
+     * @param  array<string, array<string, mixed>>  $notifications
      * @return array<string, array<string, mixed>>
      */
     private function filterAuthorizedNotifications(array $notifications, Authenticatable $user): array
     {
         return array_filter(
             $notifications,
-            fn (array $config, string $class) => $this->userCanAccessNotification($user, $class, $config),
+            function (array $_, string $class) use ($user) {
+                $ability = $this->resolveAbility($class);
+
+                return $ability === null || Gate::forUser($user)->allows($ability);
+            },
             ARRAY_FILTER_USE_BOTH
         );
-    }
-
-    /**
-     * @param  array{ability?: string}  $config
-     */
-    private function userCanAccessNotification(Authenticatable $user, string $notificationClass, array $config): bool
-    {
-        if (is_subclass_of($notificationClass, AuthorizesNotification::class)) {
-            return Gate::forUser($user)->allows($notificationClass::notificationAbility());
-        }
-
-        $ability = $config['ability'] ?? null;
-
-        if (! is_string($ability) || $ability === '') {
-            return true;
-        }
-
-        return Gate::forUser($user)->allows($ability);
     }
 
     /**
